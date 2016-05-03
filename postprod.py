@@ -16,7 +16,9 @@ broadcasts = {
               'pt': 'primetime',
               'ff': 'faldriansfeierabend'
              }
-etherpad_url = "http://pad.theradio.cc/p"
+audiofiles_url = "https://rec.theradio.cc/auphonic" # without "/" at the end
+audioformats = ['.mp3', '.ogg', '.opus']
+etherpad_url = "http://pad.theradio.cc/p" # without "/" at the end
 ## End Configs ##
 
 ## Set the date
@@ -123,6 +125,10 @@ print("\033[1m# Playlist-Datei umgewandelt \n# von '%s'\n# zu\033[0m\n%s/%s.psc"
 
 
 ## Get shownotes from etherpad
+# print audio urls
+print("\033[1mLinks der Audiodateien:\033[0m")
+for audioformat in audioformats:
+    print(audiofiles_url + '/' + newfilename + audioformat)
 
 pad_id = ''
 while pad_id == '':
