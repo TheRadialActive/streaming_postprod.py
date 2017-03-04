@@ -3,6 +3,9 @@ import os, sys, re, glob
 import datetime
 from datetime import timedelta
 import urllib.request
+from argparse import ArgumentParser
+
+ms = sys.modules[__name__]
 
 ## To test the script (to not write files or convert them) you can set DEBUG to True
 DEBUG = True
@@ -21,124 +24,189 @@ audioformats = ['.mp3', '.ogg', '.opus']
 etherpad_url = "http://pad.theradio.cc/p" # without "/" at the end
 ## End Configs ##
 
+
 ## Set the date
+def auto_date():
+    ms.year = datetime.date.today().year
+    ms.month = datetime.date.today().strftime('%m')
+    ms.day = datetime.date.today().strftime('%d')
 
-input_year = input("Jahr? (z.B. 2016, fuer heutiges Datum einfach <ENTER>) > ")
-day = ''
-if input_year == "":
-    year = datetime.date.today().year
-    month = datetime.date.today().strftime('%m')
-    day = datetime.date.today().strftime('%d')
-else:
-    while day == '':
-        input_month = input("Monat? (z.B. 04) > ")
-        input_day = input("Tag? (z.B. 19) > ")
-        year = input_year
-        month = input_month
-        day = input_day
-
-print("\033[1m# Datum: %s.%s.%s\033[0m" % (day, month, year))
+def set_date():
+    auto_date()
+    input_year = input("Jahr? (z.B. %s, fuer heutiges Datum einfach <ENTER>) > " % ms.year)
+    if input_year == "":
+        print("\033[1m# Generiertes Datum: %s.%s.%s\033[0m" % (ms.day, ms.month, ms.year))
+    else:
+        input_day = ""
+        while input_day == '':
+            input_month = input("Monat? (z.B. %s) > " % ms.month)
+            input_day = input("Tag? (z.B. %s) > " % ms.day)
+            ms.year = input_year
+            ms.month = input_month
+            ms.day = input_day
+        print("\033[1m# Datum: %s.%s.%s\033[0m" % (ms.day, ms.month, ms.year))
 
 
 ## Find idjc files
+def find_idjc_files(opt_audiofiles):
+    audiofiles = glob.glob(opt_audiofiles + '/*.*')
+    ms.flacfile = []
+    ms.listfile = []
+    for filename in audiofiles:
+        list = re.findall(r"idjc\.\[%s\-%s\-%s\]\[\d\d\:\d\d\:\d\d\]\.\d\d\.cue$" % (ms.year, ms.month, ms.day), filename)
+        if list != []:
+            ms.listfile = list[0]
+        flac = re.findall(r"idjc\.\[%s\-%s\-%s\]\[\d\d\:\d\d\:\d\d\]\.\d\d\.flac$" % (ms.year, ms.month, ms.day), filename)
+        if flac != []:
+            ms.flacfile = flac[0]
 
-audiofiles = glob.glob(audiofiles_folder + '/*.*')
-flacfile = []
-listfile = []
-for filename in audiofiles:
-    list = re.findall(r"idjc\.\[%s\-%s\-%s\]\[\d\d\:\d\d\:\d\d\]\.\d\d\.cue$" % (year, month, day), filename)
-    if list != []:
-        listfile = list[0]
-    flac = re.findall(r"idjc\.\[%s\-%s\-%s\]\[\d\d\:\d\d\:\d\d\]\.\d\d\.flac$" % (year, month, day), filename)
-    if flac != []:
-        flacfile = flac[0]
-
-if flacfile and listfile:
-    print("\033[1m# FLAC-Datei gefunden: %s\033[0m" % flacfile)
-    print("\033[1m# Playlist-Datei gefunden: %s\033[0m" % listfile)
-elif flacfile == []:
-    print("[ERR] FLAC-Datei nicht gefunden \n\n Folgende Dateien sind vorhanden:")
-    for audiofile in audiofiles:
-        print(audiofile)
-    sys.exit()
-elif listfile == []:
-    sys.exit("[ERR] Playlist-Datei nicht gefunden")
+    if ms.flacfile and ms.listfile:
+        print("\033[1m# FLAC-Datei gefunden: %s\n# Playlist-Datei gefunden: %s\033[0m" % (ms.flacfile, ms.listfile))
+    elif ms.flacfile == []:
+        print("\033[1m# [ERR] FLAC-Datei nicht gefunden \n\n Folgende Dateien sind vorhanden:\033[0m")
+        for audiofile in audiofiles:
+            print(audiofile)
+        sys.exit()
+    elif ms.listfile == []:
+        sys.exit("\033[1m# [ERR] Playlist-Datei nicht gefunden\033[0m")
 
 
 ## Set broadcast
-
-broadcast = ""
-while broadcast == "":
-    input_broadcast = input("Sendung? " + str(broadcasts.keys()) + " > ")
+def set_broadcast(broadcast):
+    while broadcast == "":
+        broadcast_list_str = ""
+        for key in broadcasts.keys():
+            broadcast_list_str = broadcast_list_str + key + ", "
+        broadcast = input("Sendung? (" + broadcast_list_str + ") > ")
     try:
         broadcast = str(broadcasts[input_broadcast])
+        print("\033[1m# Sendung %s ausgewählt\033[0m" % broadcast)
+        sys.stdout.write(broadcast)
+        return broadcast
     except:
         pass
 
+
 ## Set episode number
+def rename_audiofiles(audio_dir, broadcast_name, epi_no):
+    if audio_dir == '':
+        audio_dir = audiofiles_folder
+    if broadcast_name == '':
+        set_broadcast('')
+    if epi_no == '':
+        epi_no = input("Folgenzahl? (z.B. 225) > ")
 
-input_number = input("Folgenzahl? (z.B. 197) > ")
+    ms.newfilename = str(year) + str(month) + str(day) + '_' + broadcast_name + epi_no
+    if ms.DEBUG == False:
+        os.system("cp %s/%s %s/%s.flac" % (audio_dir, flacfile, audio_dir, ms.newfilename))
+        os.system("opusenc %s/%s.flac %s/%s.opus" % (audio_dir, ms.newfilename, audio_dir, ms.newfilename))
+    print("\033[1m# FLAC-Datei umgewandelt \n# von '%s'\n# zu %s/%s.opus\033[0m" % (ms.flacfile, audio_dir, ms.newfilename ))
 
-newfilename = str(year) + str(month) + str(day) + '_' + broadcast + input_number
-if DEBUG == False:
-    os.system("opusenc %s/%s.flac %s/%s.opus" % (audiofiles_folder, newfilename, audiofiles_folder, newfilename))
-    #os.system("mv %s/%s %s/%s.flac" % (audiofiles_folder, flacfile, audiofiles_folder, newfilename))
-print("\033[1m# FLAC-Datei umgewandelt \n# von '%s'\n# zu \033[0m\n%s/%s.opus" % (flacfile, audiofiles_folder, newfilename ))
 
 ## Convert .cue-file to .psc-file
+def convert_cue_psc(audio_dir):
+    cue_file = open(audio_dir + "/" + ms.listfile, "r")
+    cue_content = cue_file.readlines()
+    pre_psc_content = []
+    item_title = ""
+    item_timecode = ""
+    for line in cue_content:
+        got_timecode = re.findall(r'(?<=    INDEX 01 ).*', line)
+        if got_timecode and re.findall(r'^\d\d:\d\d:\d\d$', got_timecode[0]):
+            item_timecode = "00:" + got_timecode[0] + "0"
+        elif got_timecode:
+            item_timecode = got_timecode[0][1:] + "." + got_timecode[0][:2] + "0"
 
-cue_file = open(audiofiles_folder + "/" + listfile, "r")
-cue_content = cue_file.readlines()
-pre_psc_content = []
-item_title = ""
-item_timecode = ""
-for line in cue_content:
-    got_timecode = re.findall(r'(?<=   INDEX 01 ).*(?=\r)', line)
-    if got_timecode and re.findall(r'^\d\d:\d\d:\d\d$', got_timecode[0]):
-        item_timecode = "00:" + got_timecode[0] + "0"
-    elif got_timecode:
-        item_timecode = got_timecode[0][1:] + "." + got_timecode[0][:2] + "0"
-       
-    got_title = re.findall(r'(?<=   TITLE \").*(?=\")', line)
-    if got_title:
-        item_title = got_title[0]
-    if item_timecode:
-        pre_psc_content.append(item_timecode + " " + item_title)
+        got_title = re.findall(r'(?<=   TITLE \").*(?=\")', line)
+        if got_title:
+            item_title = got_title[0]
+        if item_timecode:
+            pre_psc_content.append(item_timecode + " " + item_title)
 
-# Every item should only be twice in the list (beginning and ending)
+    if not pre_psc_content:
+        sys.stderr.write("\033[1m# [ERR] Keine Timecode gefunden\033[0m")
+        sys.exit()
 
-psc_content = []
-last_line = ""
-last_title = ""
-for line in pre_psc_content:
-    title = re.findall(r'(<=\d\d:\d\d\:\d\d\.\d\d\d\ )*', line)
-    if last_line != line and title != last_title:
-        psc_content.append(line)
-    last_line = line
-    last_title = title
+    # Every item should only be twice in the list (beginning and ending)
+    psc_content = []
+    last_line = ""
+    last_title = ""
+    for line in pre_psc_content:
+        title = re.findall(r'(<=\d\d:\d\d\:\d\d\.\d\d\d\ )*', line)
+        if last_line != line and title != last_title:
+            psc_content.append(line)
+        last_line = line
+        last_title = title
 
-if DEBUG == False:
-    with open(audiofiles_folder + "/" + newfilename + ".psc", "w") as psc_file:
-        psc_file.write('\n'.join(psc_content))
-
-print("\033[1m# Playlist-Datei umgewandelt \n# von '%s'\n# zu\033[0m\n%s/%s.psc" % (listfile, audiofiles_folder, newfilename))
+    if ms.DEBUG == False:
+        with open(audio_dir + "/" + ms.newfilename + ".psc", "w") as psc_file:
+            psc_file.write('\n'.join(psc_content))
+        print("\033[1m# Playlist-Datei umgewandelt \n# von '%s'\n# zu %s/%s.psc\033[0m" % (listfile, audio_dir, ms.newfilename))
+    else:
+        print("\033[1m# DEBUG: Playlist-Datei umgewandelt \n# von '%s'\n# zu %s/%s.psc\033[0m" % (listfile, audio_dir, ms.newfilename))
 
 
 ## Get shownotes from etherpad
 # print audio urls
-print("\033[1mLinks der Audiodateien:\033[0m")
-for audioformat in audioformats:
-    print(audiofiles_url + '/' + newfilename + audioformat)
+def print_audio_urls(audio_url):
+    if not audio_url:
+        audio_url = ms.audiofiles_url
+    print("\033[1mLinks der Audiodateien:\033[0m")
+    for audioformat in audioformats:
+        print(audio_url + '/' + ms.newfilename + audioformat)
 
-pad_id = ''
-while pad_id == '':
-    pad_id = input("\033[1mEtherpad: Pad ID? (z.B. LL220) > \033[0m")
+def get_shownotes_ep(pad_link):
+    while pad_link == '':
+        pad_id = input("\033[1mEtherpad Lite ID? ('%s/<?>') > \033[0m" % etherpad_url)
+        pad_link = etherpad_url + "/" + pad_id
+    pad_txt_url = pad_link + "/export/txt"
+    with urllib.request.urlopen(pad_txt_url) as ep_content:
+        ep_content = ep_content.read().decode('utf-8')
+        print('\n\033[1m––– Content of %s –––\033[0m' % (pad_txt_url))
+        new_ep_content = ""
+        for line in ep_content.split("\n"):
+            if not re.match(r"\s+.*", line):
+                new_ep_content = new_ep_content + line + "\n"
+        sys.stdout.write(new_ep_content)
+        print('\033[1m––– End –––\033[0m\n')
 
-pad_url = etherpad_url + "/" + pad_id + "/export/txt"
-with urllib.request.urlopen(pad_url) as ep_content:
-    ep_content = ep_content.read().decode('utf-8')
-    print('\n\033[1m––– Content of %s –––\033[0m' % (pad_url))
-    for line in ep_content.split("\n"):
-        if not re.match(r"\s+.*", line):
-            print(line)
-    print('\033[1m––– End –––\033[0m\n')
+
+## Create command line options
+ap = ArgumentParser(description="Convert your idjc files to opus, rename audio files, convert cue to psc files and get shownotes from an etherpad lite instance")
+if __name__ == '__main__':
+    ap.add_argument("-d", "--default", help="Default order of output", action="store_true")
+    ap.add_argument("-D", "--debug", help="Debug mode.", action="store_true", default=ms.DEBUG)
+    ap.add_argument("-sn", "--shownotes", help="Import markdown shownotes from Etherpad Lite link", default="")
+    ap.add_argument("-epid", "--etherpadid", help="Import markdown shownotes from Etherpad Lite ID", default="")
+    ap.add_argument("-no", "--episodeno", help="Number of the episode", default="")
+    ap.add_argument("-dir", "--audiodir", help="Directory of audiofiles from idjc.", default=audiofiles_folder)
+    ap.add_argument("-u", "--audiourl", help="Custom audiourls.", default=audiofiles_url)
+    ap.add_argument("-idjc", "--idjc", help="Check if there are idjc files via date", action="store_true")
+    ap.add_argument("-b", "--broadcast", help="Set the name of the broadcast", default='')
+    ap.add_argument("-r", "--rename", help="Rename the idjc-files", action="store_true")
+    args = ap.parse_args()
+
+    DEBUG = args.debug
+
+    if args.default:
+        set_date()
+        find_idjc_files(args.audiodir)
+        rename_audiofiles(args.audiodir, args.broadcast, args.episodeno)
+        convert_cue_psc(args.audiodir)
+        print_audio_urls(args.audiourl)
+        if args.etherpadid:
+            get_shownotes_ep(etherpad_url + "/" + args.etherpadid)
+        elif args.shownotes:
+            get_shownotes_ep(args.shownotes)
+        else:
+            get_shownotes_ep('')
+    elif args.etherpadid:
+        get_shownotes_ep(etherpad_url + "/" + args.etherpadid)
+    elif args.shownotes:
+        get_shownotes_ep(args.shownotes)
+    elif args.idjc:
+        set_date()
+        find_idjc_files(args.audiodir)
+    else:
+        ap.print_help()
+        
