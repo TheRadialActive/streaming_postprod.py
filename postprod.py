@@ -8,7 +8,7 @@ from argparse import ArgumentParser
 ms = sys.modules[__name__]
 
 ## To test the script (to not write files or convert them) you can set DEBUG to True
-DEBUG = True
+ms.DEBUG = False
 
 ## Configs ##
 audiofiles_folder = "/home/dennis/Audio" # without "/" at the end
@@ -73,39 +73,41 @@ def find_idjc_files(opt_audiofiles):
 
 ## Set broadcast
 def set_broadcast(broadcast):
+    broadcast_arg = broadcast
     while broadcast == "":
         broadcast_list_str = ""
         for key in broadcasts.keys():
             broadcast_list_str = broadcast_list_str + key + ", "
         broadcast = input("Sendung? (" + broadcast_list_str + ") > ")
     try:
-        broadcast = str(broadcasts[input_broadcast])
-        print("\033[1m# Sendung %s ausgewählt\033[0m" % broadcast)
-        sys.stdout.write(broadcast)
-        return broadcast
+        broadcast_name = str(broadcasts[broadcast])
+        print("\033[1m# Sendung %s ausgewählt\033[0m" % broadcast_name)
+        return broadcast_name
     except:
         pass
 
 
 ## Set episode number
-def rename_audiofiles(audio_dir, broadcast_name, epi_no):
-    if audio_dir == '':
-        audio_dir = audiofiles_folder
+def rename_audiofiles(dir, broadcast_name, epi_no):
+    if dir == '':
+        dir = audiofiles_folder
     if broadcast_name == '':
-        set_broadcast('')
+        broadcast_name = set_broadcast('')
     if epi_no == '':
         epi_no = input("Folgenzahl? (z.B. 225) > ")
 
     ms.newfilename = str(year) + str(month) + str(day) + '_' + broadcast_name + epi_no
     if ms.DEBUG == False:
-        os.system("cp %s/%s %s/%s.flac" % (audio_dir, flacfile, audio_dir, ms.newfilename))
-        os.system("opusenc %s/%s.flac %s/%s.opus" % (audio_dir, ms.newfilename, audio_dir, ms.newfilename))
-    print("\033[1m# FLAC-Datei umgewandelt \n# von '%s'\n# zu %s/%s.opus\033[0m" % (ms.flacfile, audio_dir, ms.newfilename ))
+        os.system("cp %s/%s %s/%s.flac" % (dir, flacfile, dir, ms.newfilename))
+        os.system("opusenc %s/%s.flac %s/%s.opus" % (dir, ms.newfilename, dir, ms.newfilename))
+    else:
+        print("dir: %s, newfilename: %s, flacfile: %s, broadcast_name: %s, epi_no: %s" % (dir, ms.newfilename, flacfile, broadcast_name, epi_no))
+    print("\033[1m# FLAC-Datei umgewandelt \n# von '%s'\n# zu %s/%s.opus\033[0m" % (ms.flacfile, dir, ms.newfilename ))
 
 
 ## Convert .cue-file to .psc-file
-def convert_cue_psc(audio_dir):
-    cue_file = open(audio_dir + "/" + ms.listfile, "r")
+def convert_cue_psc(dir):
+    cue_file = open(dir + "/" + ms.listfile, "r")
     cue_content = cue_file.readlines()
     pre_psc_content = []
     item_title = ""
@@ -139,11 +141,11 @@ def convert_cue_psc(audio_dir):
         last_title = title
 
     if ms.DEBUG == False:
-        with open(audio_dir + "/" + ms.newfilename + ".psc", "w") as psc_file:
+        with open(dir + "/" + ms.newfilename + ".psc", "w") as psc_file:
             psc_file.write('\n'.join(psc_content))
-        print("\033[1m# Playlist-Datei umgewandelt \n# von '%s'\n# zu %s/%s.psc\033[0m" % (listfile, audio_dir, ms.newfilename))
+        print("\033[1m# Playlist-Datei umgewandelt \n# von '%s'\n# zu %s/%s.psc\033[0m" % (listfile, dir, ms.newfilename))
     else:
-        print("\033[1m# DEBUG: Playlist-Datei umgewandelt \n# von '%s'\n# zu %s/%s.psc\033[0m" % (listfile, audio_dir, ms.newfilename))
+        print("\033[1m# DEBUG: Playlist-Datei umgewandelt \n# von '%s'\n# zu %s/%s.psc\033[0m" % (listfile, dir, ms.newfilename))
 
 
 ## Get shownotes from etherpad
@@ -156,26 +158,31 @@ def print_audio_urls(audio_url):
         print(audio_url + '/' + ms.newfilename + audioformat)
 
 def get_shownotes_ep(pad_link):
+    pad_link_arg = pad_link
     while pad_link == '':
         pad_id = input("\033[1mEtherpad Lite ID? ('%s/<?>') > \033[0m" % etherpad_url)
         pad_link = etherpad_url + "/" + pad_id
     pad_txt_url = pad_link + "/export/txt"
     with urllib.request.urlopen(pad_txt_url) as ep_content:
         ep_content = ep_content.read().decode('utf-8')
-        print('\n\033[1m––– Content of %s –––\033[0m' % (pad_txt_url))
         new_ep_content = ""
         for line in ep_content.split("\n"):
-            if not re.match(r"\s+.*", line):
+            if not re.match(r"^\s+\/\/.*$", line):
+                line = re.sub(r"^(.*)\*\ ", "* ", line)
                 new_ep_content = new_ep_content + line + "\n"
-        sys.stdout.write(new_ep_content)
-        print('\033[1m––– End –––\033[0m\n')
+        if not pad_link_arg == "":
+            sys.stdout.write(new_ep_content)
+        else:
+            print('\n\033[1m––– Content of %s –––\033[0m' % (pad_txt_url))
+            print(new_ep_content)
+            print('\033[1m––– End –––\033[0m\n')
 
 
 ## Create command line options
 ap = ArgumentParser(description="Convert your idjc files to opus, rename audio files, convert cue to psc files and get shownotes from an etherpad lite instance")
 if __name__ == '__main__':
     ap.add_argument("-d", "--default", help="Default order of output", action="store_true")
-    ap.add_argument("-D", "--debug", help="Debug mode.", action="store_true", default=ms.DEBUG)
+    ap.add_argument("-D", "--debug", help="Debug mode. Doesn't convert files.", action="store_true", default=ms.DEBUG)
     ap.add_argument("-sn", "--shownotes", help="Import markdown shownotes from Etherpad Lite link", default="")
     ap.add_argument("-epid", "--etherpadid", help="Import markdown shownotes from Etherpad Lite ID", default="")
     ap.add_argument("-no", "--episodeno", help="Number of the episode", default="")
@@ -186,7 +193,7 @@ if __name__ == '__main__':
     ap.add_argument("-r", "--rename", help="Rename the idjc-files", action="store_true")
     args = ap.parse_args()
 
-    DEBUG = args.debug
+    ms.DEBUG = args.debug
 
     if args.default:
         set_date()
