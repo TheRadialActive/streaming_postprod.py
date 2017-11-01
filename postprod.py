@@ -106,16 +106,24 @@ def rename_audiofiles(dir, broadcast_name, epi_no):
 
 
 ## Convert .cue-file to .psc-file
-def convert_cue_psc(dir):
-    cue_file = open(dir + "/" + ms.listfile, "r")
+def convert_cue_psc(dir, **args):
+    if args:
+        cue_file = open(args["cue_filepath"], "r")
+    else:
+        cue_file = open(dir + "/" + ms.listfile, "r")
     cue_content = cue_file.readlines()
     pre_psc_content = []
     item_title = ""
     item_timecode = ""
     for line in cue_content:
         got_timecode = re.findall(r'(?<=    INDEX 01 ).*', line)
-        if got_timecode and re.findall(r'^\d\d:\d\d:\d\d$', got_timecode[0]):
-            item_timecode = "00:" + got_timecode[0] + "0"
+        if got_timecode and re.match(r'^(?P<minutes>\d\d):(?P<seconds>\d\d):(?P<millisec>\d\d)$', got_timecode[0]):
+            timecode_re = re.match(r'^(?P<minutes>\d\d):(?P<seconds>\d\d):(?P<millisec>\d\d)$', got_timecode[0])
+            tc_h = str(int(timecode_re.group('minutes'))//60).zfill(2)
+            tc_min = str(int(timecode_re.group('minutes'))%60).zfill(2)
+            tc_sec = timecode_re.group('seconds')
+            tc_ms = timecode_re.group('millisec')
+            item_timecode = tc_h + ":" + tc_min + ":" + tc_sec + "." + tc_ms + "0"
         elif got_timecode:
             item_timecode = got_timecode[0][1:] + "." + got_timecode[0][:2] + "0"
 
@@ -140,10 +148,15 @@ def convert_cue_psc(dir):
         last_line = line
         last_title = title
 
-    if ms.DEBUG == False:
+    if ms.DEBUG == False and args == False:
         with open(dir + "/" + ms.newfilename + ".psc", "w") as psc_file:
             psc_file.write('\n'.join(psc_content))
         print("\033[1m# Playlist-Datei umgewandelt \n# von '%s'\n# zu %s/%s.psc\033[0m" % (listfile, dir, ms.newfilename))
+    elif args:
+        psc_filepath = str(args["cue_filepath"]) + ".psc"
+        with open(psc_filepath, "w") as psc_file:
+            psc_file.write('\n'.join(psc_content))
+        print("\033[1m# Playlist-Datei umgewandelt \n# von '%s'\n# zu %s\033[0m" % (str(args["cue_filepath"]), psc_filepath))
     else:
         print("\033[1m# DEBUG: Playlist-Datei umgewandelt \n# von '%s'\n# zu %s/%s.psc\033[0m" % (listfile, dir, ms.newfilename))
 
@@ -191,6 +204,7 @@ if __name__ == '__main__':
     ap.add_argument("-idjc", "--idjc", help="Check if there are idjc files via date", action="store_true")
     ap.add_argument("-b", "--broadcast", help="Set the name of the broadcast", default='')
     ap.add_argument("-r", "--rename", help="Rename the idjc-files", action="store_true")
+    ap.add_argument("-ccm", "--convcm", help="Convert .cue- to .psc chaptermark files")
     args = ap.parse_args()
 
     ms.DEBUG = args.debug
@@ -214,6 +228,7 @@ if __name__ == '__main__':
     elif args.idjc:
         set_date()
         find_idjc_files(args.audiodir)
+    elif args.convcm:
+        convert_cue_psc(args.audiodir, cue_filepath=args.convcm)
     else:
         ap.print_help()
-        
